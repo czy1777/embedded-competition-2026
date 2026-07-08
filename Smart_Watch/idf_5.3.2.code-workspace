@@ -1,0 +1,20 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"idf.espIdfPathWin": "d:\\esp32-idf-ahy\\5.3.2\\frameworks\\esp-idf-v5.3.2",
+		"idf.pythonBinPathWin": "d:\\esp32-idf-ahy\\5.3.2\\python_env\\idf5.3_py3.11_env\\Scripts\\python.exe",
+		"idf.toolsPathWin": "d:\\esp32-idf-ahy\\5.3.2",
+		"idf.customExtraPaths": "d:\\esp32-idf-ahy\\5.3.2\\tools\\xtensa-esp-elf-gdb\\14.2_20240403\\xtensa-esp-elf-gdb\\bin;d:\\esp32-idf-ahy\\5.3.2\\tools\\riscv32-esp-elf-gdb\\14.2_20240403\\riscv32-esp-elf-gdb\\bin;d:\\esp32-idf-ahy\\5.3.2\\tools\\xtensa-esp-elf\\esp-13.2.0_20240530\\xtensa-esp-elf\\bin;d:\\esp32-idf-ahy\\5.3.2\\tools\\riscv32-esp-elf\\esp-13.2.0_20240530\\riscv32-esp-elf\\bin;d:\\esp32-idf-ahy\\5.3.2\\tools\\esp32ulp-elf\\2.38_20240113\\esp32ulp-elf\\bin;d:\\esp32-idf-ahy\\5.3.2\\tools\\cmake\\3.30.2\\bin;d:\\esp32-idf-ahy\\5.3.2\\tools\\openocd-esp32\\v0.12.0-esp32-20241016\\openocd-esp32\\bin;d:\\esp32-idf-ahy\\5.3.2\\tools\\ninja\\1.12.1;d:\\esp32-idf-ahy\\5.3.2\\tools\\idf-exe\\1.0.3;d:\\esp32-idf-ahy\\5.3.2\\tools\\ccache\\4.10.2\\ccache-4.10.2-windows-x86_64;d:\\esp32-idf-ahy\\5.3.2\\tools\\dfu-util\\0.11\\dfu-util-0.11-win64;d:\\esp32-idf-ahy\\5.3.2\\tools\\esp-rom-elfs\\20240305",
+		"idf.customExtraVars": {
+			"OPENOCD_SCRIPTS": "d:\\esp32-idf-ahy\\5.3.2\\tools\\openocd-esp32\\v0.12.0-esp32-20241016/openocd-esp32/share/openocd/scripts",
+			"IDF_CCACHE_ENABLE": "1",
+			"ESP_ROM_ELF_DIR": "d:\\esp32-idf-ahy\\5.3.2\\tools\\esp-rom-elfs\\20240305/"
+		},
+		"idf.gitPathWin": "d:\\esp32-idf-ahy\\5.3.2\\tools\\idf-git\\2.44.0\\cmd\\git.exe",
+		"idf.espAdfPathWin": "d:\\esp32-idf-ahy\\esp-adf"
+	}
+}

@@ -1,0 +1,12 @@
+# ESP-IDF build output
+build/
+sdkconfig.old
+managed_components/
+
+# Editor / tooling
+.vscode/
+.cache/
+*.pyc
+
+# Local secrets
+.env

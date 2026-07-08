@@ -1,0 +1,18 @@
+{
+  "name": "spark-cloud-web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SPARK helper walker telemetry dashboard (MQTT subscriber + Socket.IO bridge + static frontend)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "mock": "node test/mock_publisher.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.11.1",
+    "express": "^4.19.2",
+    "mqtt": "^5.10.1",
+    "socket.io": "^4.7.5"
+  }
+}

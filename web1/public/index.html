@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SPARK 助行器数据仪表盘</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://webapi.amap.com/maps?v=2.0&key=e150280e59b5ce00e01c58c13c1d8cde"></script>
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background:
+        radial-gradient(ellipse 80% 60% at 20% 0%, rgba(56, 189, 248, 0.10), transparent 60%),
+        radial-gradient(ellipse 60% 50% at 80% 100%, rgba(139, 92, 246, 0.10), transparent 60%),
+        linear-gradient(180deg, #0f172a 0%, #1e293b 50%, #0c1425 100%);
+      color: #fff;
+      min-height: 100vh;
+    }
+    .glass {
+      background: rgba(15, 23, 42, 0.5);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .pulse-dot {
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+    .stat-value { font-variant-numeric: tabular-nums; }
+
+    .nav-link {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 12px; border-radius: 8px;
+      color: rgba(255,255,255,0.55); font-size: 13px;
+      transition: background 0.15s, color 0.15s;
+    }
+    .nav-link:hover { background: rgba(255,255,255,0.05); color: #fff; }
+    .nav-link.nav-active {
+      background: linear-gradient(90deg, rgba(6,182,212,0.15), rgba(139,92,246,0.04));
+      color: rgb(103, 232, 249);
+      box-shadow: inset 2px 0 0 #06b6d4;
+    }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* 移动端 sidebar 抽屉 */
+    @media (max-width: 1023px) {
+      .sidebar { position: fixed; top: 0; left: 0; height: 100vh; transform: translateX(-100%); transition: transform 0.2s; z-index: 40; }
+      .sidebar.open { transform: translateX(0); }
+      .sidebar-mask { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 30; display: none; }
+      .sidebar-mask.open { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <div class="flex min-h-screen">
+
+    <!-- 移动端汉堡按钮 -->
+    <button id="menu-toggle" class="lg:hidden fixed top-4 left-4 z-50 h-9 w-9 rounded-lg glass flex items-center justify-center">
+      <i data-lucide="menu" class="h-4 w-4"></i>
+    </button>
+    <div id="sidebar-mask" class="sidebar-mask lg:hidden"></div>
+
+    <!-- 侧栏 -->
+    <aside id="sidebar" class="sidebar glass w-60 flex-none flex flex-col">
+      <div class="p-4 border-b border-white/10">
+        <div class="flex items-center gap-2">
+          <div class="h-9 w-9 rounded-xl bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center">
+            <i data-lucide="activity" class="h-4 w-4 text-cyan-300"></i>
+          </div>
+          <div>
+            <p class="text-sm font-semibold">SPARK Walker</p>
+            <p class="text-[10px] text-white/50">助行器实时监测</p>
+          </div>
+        </div>
+      </div>
+
+      <nav class="flex-1 p-2 space-y-1">
+        <a href="#health" data-page="health" class="nav-link">
+          <i data-lucide="heart-pulse" class="h-4 w-4"></i><span>健康监测</span>
+        </a>
+        <a href="#env" data-page="env" class="nav-link">
+          <i data-lucide="wind" class="h-4 w-4"></i><span>环境定位</span>
+        </a>
+        <a href="#gait" data-page="gait" class="nav-link">
+          <i data-lucide="footprints" class="h-4 w-4"></i><span>步态分析</span>
+        </a>
+        <a href="#history" data-page="history" class="nav-link">
+          <i data-lucide="history" class="h-4 w-4"></i><span>历史回放</span>
+        </a>
+      </nav>
+
+      <div class="p-3 border-t border-white/10">
+        <div class="flex items-center gap-2 mb-2 text-xs">
+          <span id="conn-dot" class="h-2 w-2 rounded-full bg-amber-400 pulse-dot"></span>
+          <span id="conn-text" class="text-white/70">连接中…</span>
+        </div>
+        <p class="text-[10px] text-white/40">运行时间 <span class="js-uptime stat-value">--</span></p>
+      </div>
+    </aside>
+
+    <!-- 主区 -->
+    <main class="flex-1 min-w-0 p-4 lg:p-6">
+
+      <!-- Header -->
+      <header class="glass rounded-2xl p-4 mb-6 flex items-center justify-between flex-wrap gap-2">
+        <div class="flex items-center gap-3 pl-12 lg:pl-0">
+          <div>
+            <p class="text-xs text-white/50" id="page-crumb">健康监测</p>
+            <h1 class="text-lg font-semibold" id="page-title">心率 / 血氧 / 体温 / 跌倒</h1>
+          </div>
+        </div>
+        <div class="flex items-center gap-2 text-sm">
+          <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/60 border border-white/10 text-white/70">
+            <i data-lucide="clock" class="h-3.5 w-3.5"></i>
+            <span id="now-clock">--:--:--</span>
+          </span>
+        </div>
+      </header>
+
+      <!-- ========= 健康监测 ========= -->
+      <section id="page-health" class="page">
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div class="glass rounded-xl p-4">
+            <div class="flex items-center justify-between">
+              <p class="text-xs text-white/60">心率</p>
+              <span id="watch-badge" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] bg-slate-700/60 border border-white/10 text-white/60">
+                <span id="watch-dot" class="h-1 w-1 rounded-full bg-white/40"></span>
+                <span id="watch-text">手表</span>
+              </span>
+            </div>
+            <p class="text-3xl font-semibold stat-value mt-1"><span class="js-hr">--</span><span class="text-sm text-white/50 ml-1">bpm</span></p>
+          </div>
+          <div class="glass rounded-xl p-4">
+            <p class="text-xs text-white/60">血氧</p>
+            <p class="text-3xl font-semibold stat-value mt-1"><span class="js-spo2">--</span><span class="text-sm text-white/50 ml-1">%</span></p>
+          </div>
+          <div class="glass rounded-xl p-4">
+            <p class="text-xs text-white/60">体温</p>
+            <p class="text-3xl font-semibold stat-value mt-1"><span class="js-body-temp">--</span><span class="text-sm text-white/50 ml-1">°C</span></p>
+          </div>
+          <div class="glass rounded-xl p-4">
+            <p class="text-xs text-white/60">跌倒</p>
+            <p class="text-3xl font-semibold mt-1"><span id="fall-text-2" class="text-emerald-300">正常</span></p>
+          </div>
+        </div>
+
+        <div class="glass rounded-xl p-4 mb-4">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+              <h2 class="text-sm font-semibold text-white/80">跌倒事件时间线</h2>
+              <p class="text-[10px] text-white/40 mt-0.5">最近 7 天</p>
+            </div>
+            <div class="flex items-center gap-3 text-xs">
+              <span class="text-white/60">今日 <span id="fall-today-count" class="text-rose-300 font-semibold">0</span></span>
+              <span class="text-white/60">本周 <span id="fall-week-count" class="text-rose-300 font-semibold">0</span></span>
+            </div>
+          </div>
+          <div class="h-40 mb-3"><canvas id="chart-fall"></canvas></div>
+          <div>
+            <p class="text-xs text-white/50 mb-1.5">最近事件</p>
+            <ul id="fall-list" class="text-xs text-white/70 space-y-1">
+              <li class="text-white/40">暂无跌倒事件</li>
+            </ul>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========= 环境定位 ========= -->
+      <section id="page-env" class="page">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+          <div class="glass rounded-xl p-4">
+            <p class="text-xs text-white/60">PM2.5</p>
+            <p class="text-3xl font-semibold stat-value mt-1"><span class="js-pm25">--</span><span class="text-sm text-white/50 ml-1">µg/m³</span></p>
+            <p class="text-xs mt-1" id="pm25-tag-2">--</p>
+          </div>
+          <div class="glass rounded-xl p-4">
+            <p class="text-xs text-white/60">室温</p>
+            <p class="text-3xl font-semibold stat-value mt-1"><span class="js-amb-temp">--</span><span class="text-sm text-white/50 ml-1">°C</span></p>
+          </div>
+          <div class="glass rounded-xl p-4">
+            <p class="text-xs text-white/60">湿度</p>
+            <p class="text-3xl font-semibold stat-value mt-1"><span class="js-humidity">--</span><span class="text-sm text-white/50 ml-1">%</span></p>
+          </div>
+        </div>
+
+        <div class="glass rounded-xl p-4 mb-4">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold text-white/80">地图定位</h2>
+            <span id="map-status" class="text-xs text-white/50">等待 GPS 定位…</span>
+          </div>
+          <div id="map" class="w-full h-72 rounded-lg overflow-hidden"></div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="glass rounded-xl p-4">
+            <div class="flex items-center justify-between mb-3">
+              <h2 class="text-sm font-semibold text-white/80">GPS 定位</h2>
+              <span id="gps-fix-2" class="text-xs px-2 py-0.5 rounded-full bg-slate-700/60 border border-white/10 text-white/60">未定位</span>
+            </div>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between"><span class="text-white/50">纬度</span><span class="stat-value js-gps-lat">--</span></div>
+              <div class="flex justify-between"><span class="text-white/50">经度</span><span class="stat-value js-gps-lon">--</span></div>
+              <div class="flex justify-between"><span class="text-white/50">UTC 时间</span><span class="stat-value text-xs js-gps-utc">--</span></div>
+            </div>
+          </div>
+
+          <div class="glass rounded-xl p-4">
+            <h2 class="text-sm font-semibold text-white/80 mb-3">姿态 / 坡道</h2>
+            <div class="flex items-center justify-between">
+              <div>
+                <p class="text-4xl font-semibold stat-value"><span class="js-pitch">--</span><span class="text-lg text-white/50 ml-1">°</span></p>
+                <p class="text-xs text-white/50 mt-1">pitch 角</p>
+              </div>
+              <span id="slope-badge-2" class="px-4 py-1.5 rounded-full bg-slate-700/60 border border-white/10 text-sm">--</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========= 步态分析(核心) ========= -->
+      <section id="page-gait" class="page">
+        <!-- 徽章条 -->
+        <div class="glass rounded-xl p-4 mb-4">
+          <div class="flex items-center justify-between mb-2">
+            <div>
+              <p class="text-xs text-white/50">步态轻提示 · 每 5 秒滚动更新</p>
+              <p class="text-[10px] text-white/40 mt-0.5">seq <span class="js-kp-seq">--</span> · <span id="kp-rate">--</span> Hz · 分析窗口 30s</p>
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2 min-h-[26px]" id="hint-bar">
+            <span class="px-3 py-1 rounded-full bg-slate-700/60 border border-white/10 text-white/50 text-xs">等待步态分析…</span>
+          </div>
+        </div>
+
+        <!-- 实时散点 + 双踝轨迹 -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <div class="glass rounded-xl p-4">
+            <p class="text-sm font-semibold text-white/80 mb-2">实时 6 关键点散点</p>
+            <div class="h-72"><canvas id="chart-kp-scatter"></canvas></div>
+          </div>
+          <div class="glass rounded-xl p-4">
+            <p class="text-sm font-semibold text-white/80 mb-2">双踝 X 坐标轨迹(最近 30 秒)</p>
+            <div class="h-72"><canvas id="chart-kp-ankle"></canvas></div>
+          </div>
+        </div>
+
+        <!-- 4 sparkline -->
+        <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <div class="glass rounded-xl p-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-white/60">步频 spm</span>
+              <span class="text-xl font-semibold stat-value js-spm">--</span>
+            </div>
+            <div class="h-14 mt-1"><canvas id="chart-m-spm"></canvas></div>
+          </div>
+          <div class="glass rounded-xl p-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-white/60">对称性</span>
+              <span class="text-xl font-semibold stat-value"><span class="js-sym">--</span><span class="text-xs text-white/50 ml-1">%</span></span>
+            </div>
+            <div class="h-14 mt-1"><canvas id="chart-m-symmetry"></canvas></div>
+          </div>
+          <div class="glass rounded-xl p-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-white/60">膝屈伸幅度</span>
+              <span class="text-sm font-semibold stat-value">
+                <span class="js-knee-l text-pink-300">--</span>
+                <span class="text-white/40 mx-0.5">/</span>
+                <span class="js-knee-r text-cyan-300">--</span>
+                <span class="text-xs text-white/50 ml-1">°</span>
+              </span>
+            </div>
+            <div class="h-14 mt-1"><canvas id="chart-m-knee"></canvas></div>
+          </div>
+          <div class="glass rounded-xl p-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-white/60">稳定性</span>
+              <span class="text-xl font-semibold stat-value js-stab">--</span>
+            </div>
+            <div class="h-14 mt-1"><canvas id="chart-m-stability"></canvas></div>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- ========= 历史回放 ========= -->
+      <section id="page-history" class="page">
+        <div class="glass rounded-xl p-4 mb-4">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div>
+              <h2 class="text-sm font-semibold text-white/80">步态历史回放</h2>
+              <p class="text-xs text-white/50 mt-0.5">支持任意时间窗回放</p>
+            </div>
+            <span class="text-xs text-white/50" id="hist-status">选择时间窗后点击"加载"</span>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="inline-flex gap-1">
+              <button data-quick="5"   class="hist-quick px-3 py-1.5 rounded-md bg-slate-800/60 border border-white/10 text-xs hover:bg-slate-700/60">最近 5 分钟</button>
+              <button data-quick="15"  class="hist-quick px-3 py-1.5 rounded-md bg-slate-800/60 border border-white/10 text-xs hover:bg-slate-700/60">15 分钟</button>
+              <button data-quick="60"  class="hist-quick px-3 py-1.5 rounded-md bg-slate-800/60 border border-white/10 text-xs hover:bg-slate-700/60">1 小时</button>
+              <button data-quick="360" class="hist-quick px-3 py-1.5 rounded-md bg-slate-800/60 border border-white/10 text-xs hover:bg-slate-700/60">6 小时</button>
+            </div>
+            <div class="inline-flex items-center gap-2 ml-2">
+              <label class="text-xs text-white/50">自定义</label>
+              <input id="hist-from" type="datetime-local" class="px-2 py-1 rounded bg-slate-800/60 border border-white/10 text-xs" />
+              <span class="text-white/40">→</span>
+              <input id="hist-to"   type="datetime-local" class="px-2 py-1 rounded bg-slate-800/60 border border-white/10 text-xs" />
+            </div>
+            <button id="hist-load" class="px-4 py-1.5 rounded-md bg-cyan-500/20 border border-cyan-400/30 text-cyan-200 text-xs hover:bg-cyan-500/30">加载</button>
+            <button id="hist-clear" class="px-3 py-1.5 rounded-md bg-slate-800/60 border border-white/10 text-xs text-white/60 hover:bg-slate-700/60">清空</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+          <div class="glass rounded-xl p-4">
+            <p class="text-sm font-semibold text-white/80 mb-2">双踝 X 轨迹(历史)</p>
+            <div class="h-72"><canvas id="chart-hist-ankle"></canvas></div>
+          </div>
+          <div class="glass rounded-xl p-4">
+            <p class="text-sm font-semibold text-white/80 mb-2">步频 / 对称性 / 稳定性</p>
+            <div class="h-72"><canvas id="chart-hist-metrics"></canvas></div>
+          </div>
+        </div>
+
+        <!-- AI 综合分析 -->
+        <div class="rounded-xl p-4 border border-cyan-400/20 bg-gradient-to-br from-cyan-500/10 via-slate-900/40 to-violet-500/10">
+          <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <div class="flex items-center gap-2">
+              <div class="h-8 w-8 rounded-lg bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center">
+                <i data-lucide="sparkles" class="h-4 w-4 text-cyan-300"></i>
+              </div>
+              <div>
+                <p class="text-sm font-semibold">AI 综合步态分析</p>
+                <p class="text-[10px] text-white/50" id="ai-provider-tag">provider · 加载中…</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 flex-wrap">
+              <select id="ai-window" class="px-2 py-1 rounded bg-slate-800/60 border border-white/10 text-xs">
+                <option value="3">最近 3 分钟</option>
+                <option value="5" selected>最近 5 分钟</option>
+                <option value="10">最近 10 分钟</option>
+                <option value="30">最近 30 分钟</option>
+                <option value="60">最近 1 小时</option>
+                <option value="180">最近 3 小时</option>
+                <option value="360">最近 6 小时</option>
+                <option value="720">最近 12 小时</option>
+                <option value="1440">最近 24 小时</option>
+              </select>
+              <button id="ai-analyze-btn" class="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-cyan-500/20 border border-cyan-400/30 text-cyan-200 text-xs hover:bg-cyan-500/30 disabled:opacity-40 disabled:cursor-not-allowed">
+                <i data-lucide="wand-sparkles" class="h-3.5 w-3.5"></i>
+                一键分析
+              </button>
+            </div>
+          </div>
+
+          <div id="ai-report-empty" class="text-center py-6 text-sm text-white/40">
+            选择时间窗后点击"一键分析",AI 将综合步频、对称性、膝屈伸、稳定性生成解读报告
+          </div>
+
+          <div id="ai-report" class="hidden">
+            <div class="mb-3">
+              <p class="text-xs text-white/50 mb-1">简要总评</p>
+              <p class="text-sm text-white/90 leading-relaxed" id="ai-summary"></p>
+            </div>
+            <div class="mb-3">
+              <p class="text-xs text-white/50 mb-1.5">风险评估</p>
+              <div class="flex flex-wrap gap-2" id="ai-risks"></div>
+            </div>
+            <div class="mb-3">
+              <p class="text-xs text-white/50 mb-1.5">改进建议</p>
+              <ul class="space-y-1 text-sm text-white/85 list-disc list-inside" id="ai-suggestions"></ul>
+            </div>
+            <p class="text-[11px] text-amber-200/70 mt-3 flex items-start gap-1.5">
+              <i data-lucide="info" class="h-3 w-3 mt-0.5 flex-none"></i>
+              <span id="ai-disclaimer"></span>
+            </p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
